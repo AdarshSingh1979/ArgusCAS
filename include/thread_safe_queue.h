@@ -25,7 +25,7 @@ public:
 
     ItemType popItem(){
         std:: unique_lock <std::mutex> uniqueLock(queueMutex);
-        queueNotEmptySignal.wait(uniqueLock, [This](){
+        queueNotEmptySignal.wait(uniqueLock, [this](){
             return !internalQueue.empty();
         });
 
@@ -44,6 +44,6 @@ public:
 private:
     std:: queue<ItemType> internalQueue;
     std:: mutex queueMutex;
-    std:: queueNotEmptySignal
+    std::condition_variable queueNotEmptySignal;
 };
 

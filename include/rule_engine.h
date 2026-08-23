@@ -17,14 +17,14 @@
             maxAllowedInWindow : how many matches are allowed before alerting
             windowDurationSeconds : the size of sliding time window     */
             
-            RuleEngine(int wordToMatch, int maxAllowedInWindow, int windowDurationSeconds);
+            RuleEngine(std::string wordToMatch, int maxAllowedInWindow, int windowDurationSeconds);
 
         /*  Keeps pulling log lines from shared queue forever, and checks each one against this rule.   
             Meant to run on its own thread */
 
             void startWatching( ThreadSafeQueue<LogEntry>& sharedQueue );
 
-        Private:
+        private:
             std:: string wordToMatch;
             int maxAllowedInWindow;
             int windowDurationSeconds;
@@ -38,4 +38,4 @@
             // and returns true if count now exceeds our limit.
 
             bool shouldFireAlert( std:: chrono:: system_clock:: time_point newMatchTime);
-    }
+    };
