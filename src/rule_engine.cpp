@@ -26,7 +26,7 @@ RuleEngine::RuleEngine(std::string wordToMatch, int maxAllowedInWindow, int wind
 
     void RuleEngine:: startWatching( ThreadSafeQueue<LogEntry>& sharedQueue){
         while(true){
-            LogEntry entry = sharedQueue.pop_item();
+            LogEntry entry = sharedQueue.popItem();
 
             //  Only lines containing our target word count towards this rule.
             if( entry.lineContent.find(wordToMatch) != std:: string:: npos){
