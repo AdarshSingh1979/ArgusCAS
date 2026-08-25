@@ -31,8 +31,8 @@ RuleEngine::RuleEngine(std::string wordToMatch, int maxAllowedInWindow, int wind
             //  Only lines containing our target word count towards this rule.
             if( entry.lineContent.find(wordToMatch) != std:: string:: npos){
                 if( shouldFireAlert(entry.capturedAt) ){
-                    std:: string message = "Detected" + std:: to_string( maxAllowedInWindow)+ 
-                   "occurrences of \"" + wordToMatch + "\" within "+ std:: to_string(windowDurationSeconds) + " seconds.";
+                    std::string message = "Detected " + std::to_string(maxAllowedInWindow) +
+                    "+ occurrences of \"" + wordToMatch + "\" within " + std::to_string(windowDurationSeconds) + " seconds.";
 
                    sendConsoleAlert(message);
                 }
