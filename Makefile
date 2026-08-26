@@ -6,7 +6,7 @@ OBJ := $(SRC:src/%.cpp=build/%.o)
 TARGET := log_monitor
 
 BENCHMARK_SRC := tests/benchmark.cpp
-BENCHMARK_BIN := benchmark
+BENCHMARK_BIN := benchmark_bin
 
 .PHONY: all clean run benchmark
 
