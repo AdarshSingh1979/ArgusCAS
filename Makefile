@@ -6,7 +6,7 @@ OBJ := $(SRC:src/%.cpp=build/%.o)
 TARGET := log_monitor
 
 BENCHMARK_SRC := tests/benchmark.cpp
-BENCHMARK_TARGET := benchmark
+BENCHMARK_BIN := benchmark
 
 .PHONY: all clean run benchmark
 
@@ -21,14 +21,14 @@ build/%.o: src/%.cpp | build
 build:
 	mkdir -p build
 
-benchmark: $(BENCHMARK_TARGET)
-	./$(BENCHMARK_TARGET)
-
-$(BENCHMARK_TARGET): $(BENCHMARK_SRC)
+$(BENCHMARK_BIN): $(BENCHMARK_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $
+
+benchmark: $(BENCHMARK_BIN)
+	./$(BENCHMARK_BIN)
 
 run: all
 	./$(TARGET)
 
 clean:
-	rm -rf build $(TARGET) $(BENCHMARK_TARGET)
+	rm -rf build $(TARGET) $(BENCHMARK_BIN)
