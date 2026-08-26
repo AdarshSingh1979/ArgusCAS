@@ -96,8 +96,10 @@ public:
                     ItemType value = nextNode->data;
                     if (headPointer.compare_exchange_weak(firstNode, nextNode)) {
 
-                        // Head moved forward successfully, old dummy is now unused.
-                        delete firstNode;
+                        /* Intentionally not deleting firstNode here. A fully safe reclamation strategy needs hazard pointers or epoch-based
+                           reclamation so other threads can tell when a node is truly unreferenced. Without that, deleting immediately
+                           causes a use-after-free race under contention, confirmed by ThreadSanitizer. Leaking the node trades memory growth
+                           for correctness, which is the safe choice at this scope. */
                         return value;
                     }
                 }

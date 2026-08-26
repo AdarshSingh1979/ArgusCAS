@@ -2,33 +2,63 @@
 #include <thread>
 #include <chrono>
 #include <vector>
+#include <algorithm>
 #include "../include/thread_safe_queue.h"
 #include "../include/lock_free_queue.h"
 
 constexpr int itemsPerProducer = 100000;
 constexpr int producerThreadCount = 4;
+constexpr int totalItemsExpected = itemsPerProducer * producerThreadCount;
 
-/* Runs the same push/pop workload against whichever queue type is passed in,
-   and returns how long the whole run took in milliseconds.    */
+// Holds everything we measured from one benchmark run.
+struct BenchmarkResult {
+    long long totalDurationMs;
+    long long p50LatencyNs;
+    long long p90LatencyNs;
+    bool allItemsAccountedFor;
+};
+
+/* Runs the same push/pop workload against whichever queue type is passed in.
+   Each pushed item carries a globally unique ID, 
+   so the consumer can verify every single item was received exactly once, with no losses or duplicates. */
 
 template <typename QueueType>
-long long runBenchmark(QueueType& queue) {
-    int totalItemsExpected = itemsPerProducer * producerThreadCount;
-
+BenchmarkResult runBenchmark(QueueType& queue) {
     auto startTime = std::chrono::steady_clock::now();
+
+    /* Each producer thread records its own push latencies locally,
+       so the threads never contend with each other just to record a timestamp.  */
+
+    std::vector<std::vector<long long>> perThreadLatencies(producerThreadCount);
 
     std::vector<std::thread> producerThreads;
     for (int producerIndex = 0; producerIndex < producerThreadCount; producerIndex = producerIndex + 1) {
-        producerThreads.push_back(std::thread([&queue]() {
+        producerThreads.push_back(std::thread([&queue, &perThreadLatencies, producerIndex]() {
+            perThreadLatencies[producerIndex].reserve(itemsPerProducer);
             for (int itemIndex = 0; itemIndex < itemsPerProducer; itemIndex = itemIndex + 1) {
-                queue.pushItem(itemIndex);
+                int uniqueItemId = producerIndex * itemsPerProducer + itemIndex;
+
+                auto pushStart = std::chrono::steady_clock::now();
+                queue.pushItem(uniqueItemId);
+                auto pushEnd = std::chrono::steady_clock::now();
+
+                long long latencyNs = std::chrono::duration_cast<std::chrono::nanoseconds>(pushEnd - pushStart).count();
+                perThreadLatencies[producerIndex].push_back(latencyNs);
             }
         }));
     }
 
-    std::thread consumerThread([&queue, totalItemsExpected]() {
+    // The consumer marks off every item ID it sees, so we can confirm afterward that every item arrived exactly once.
+    std::vector<bool> itemWasReceived(totalItemsExpected, false);
+    bool duplicateDetected = false;
+
+    std::thread consumerThread([&queue, &itemWasReceived, &duplicateDetected]() {
         for (int receivedCount = 0; receivedCount < totalItemsExpected; receivedCount = receivedCount + 1) {
-            queue.popItem();
+            int receivedId = queue.popItem();
+            if (itemWasReceived[receivedId]) {
+                duplicateDetected = true;
+            }
+            itemWasReceived[receivedId] = true;
         }
     });
 
@@ -38,20 +68,55 @@ long long runBenchmark(QueueType& queue) {
     consumerThread.join();
 
     auto endTime = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    // Merge every thread's latency measurements into one list, then sort it so we can read off percentiles directly by index.
+    std::vector<long long> allLatencies;
+    allLatencies.reserve(totalItemsExpected);
+    for (int producerIndex = 0; producerIndex < producerThreadCount; producerIndex = producerIndex + 1) {
+        for (long long latency : perThreadLatencies[producerIndex]) {
+            allLatencies.push_back(latency);
+        }
+    }
+    std::sort(allLatencies.begin(), allLatencies.end());
+
+    bool allReceived = true;
+    for (int itemIndex = 0; itemIndex < totalItemsExpected; itemIndex = itemIndex + 1) {
+        if (!itemWasReceived[itemIndex]) {
+            allReceived = false;
+        }
+    }
+
+    BenchmarkResult result;
+    result.totalDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+    result.p50LatencyNs = allLatencies[allLatencies.size() * 50 / 100];
+    result.p90LatencyNs = allLatencies[allLatencies.size() * 90 / 100];
+    result.allItemsAccountedFor = allReceived && !duplicateDetected;
+
+    return result;
+}
+
+void printResult(const std::string& queueName, const BenchmarkResult& result) {
+    std::cout << queueName << ":" << std::endl;
+    std::cout << "  Total time:        " << result.totalDurationMs << " ms" << std::endl;
+    std::cout << "  p50 push latency:  " << result.p50LatencyNs << " ns" << std::endl;
+    std::cout << "  p90 push latency:  " << result.p90LatencyNs << " ns" << std::endl;
+    std::cout << "  Correctness check: " << (result.allItemsAccountedFor ? "PASSED (no lost or duplicated items)" : "FAILED") << std::endl;
 }
 
 int main() {
-    std::cout << "Running benchmark: " << (itemsPerProducer * producerThreadCount)
+    std::cout << "Running benchmark: " << totalItemsExpected
               << " items, " << producerThreadCount << " producer threads, 1 consumer thread." << std::endl;
+    std::cout << std::endl;
 
     ThreadSafeQueue<int> lockedQueue;
-    long long lockedDuration = runBenchmark(lockedQueue);
-    std::cout << "ThreadSafeQueue (mutex-based): " << lockedDuration << " ms" << std::endl;
+    BenchmarkResult lockedResult = runBenchmark(lockedQueue);
+    printResult("ThreadSafeQueue (mutex-based)", lockedResult);
+
+    std::cout << std::endl;
 
     LockFreeQueue<int> lockFreeQueue;
-    long long lockFreeDuration = runBenchmark(lockFreeQueue);
-    std::cout << "LockFreeQueue (CAS-based):     " << lockFreeDuration << " ms" << std::endl;
+    BenchmarkResult lockFreeResult = runBenchmark(lockFreeQueue);
+    printResult("LockFreeQueue (CAS-based)", lockFreeResult);
 
     return 0;
 }
