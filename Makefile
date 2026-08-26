@@ -22,7 +22,7 @@ build:
 	mkdir -p build
 
 $(BENCHMARK_BIN): $(BENCHMARK_SRC)
-	$(CXX) $(CXXFLAGS) -o $@ $
+	$(CXX) $(CXXFLAGS) -o $@ $<
 
 benchmark: $(BENCHMARK_BIN)
 	./$(BENCHMARK_BIN)
