@@ -4,24 +4,20 @@
 #include <mutex>
 #include <condition_variable>
 
-/*  A queue that many threads can safely push into and pop from at the same time,
-    without stepping on each other's toes.
-    The tailer threads will push log line in, and the rule engine thread will pop them out.  */
+/*  A queue that many threads can safely push into and pop from at the same time.
+    Tailer threads push log lines in, the rule engine thread pops them out.  */
 
 template <typename ItemType>
 class ThreadSafeQueue{
 public:
 
-    //  Add one item to the back of the queue.
     void pushItem( ItemType newItem ){
         std:: lock_guard <std::mutex> lockGuard(queueMutex);
         internalQueue.push(newItem);
         queueNotEmptySignal.notify_one();
     }
 
-    /*  Removes and returns the items at the front of the queue.
-        If the queue is empty, this call waits (sleeps) until something is pushed in,
-        instead of wasting CPU checking again and again.    */
+    // blocks (sleeps) if the queue is empty instead of busy-checking
 
     ItemType popItem(){
         std:: unique_lock <std::mutex> uniqueLock(queueMutex);

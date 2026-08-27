@@ -18,16 +18,13 @@ struct BenchmarkResult {
     bool allItemsAccountedFor;
 };
 
-/* Runs the same push/pop workload against whichever queue type is passed in.
-   Each pushed item carries a globally unique ID, 
-   so the consumer can verify every single item was received exactly once, with no losses or duplicates. */
+// each item carries a unique ID so the consumer can verify no losses/duplicates
 
 template <typename QueueType>
 BenchmarkResult runBenchmark(QueueType& queue) {
     auto startTime = std::chrono::steady_clock::now();
 
-    /* Each producer thread records its own push latencies locally,
-       so the threads never contend with each other just to record a timestamp.  */
+    // each producer records its own latencies locally so threads don't contend just to log a timestamp
 
     std::vector<std::vector<long long>> perThreadLatencies(producerThreadCount);
 
@@ -48,7 +45,7 @@ BenchmarkResult runBenchmark(QueueType& queue) {
         }));
     }
 
-    // The consumer marks off every item ID it sees, so we can confirm afterward that every item arrived exactly once.
+    // marks off every item ID seen, to confirm each arrived exactly once
     std::vector<bool> itemWasReceived(totalItemsExpected, false);
     bool duplicateDetected = false;
 

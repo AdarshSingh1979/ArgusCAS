@@ -25,15 +25,12 @@ int main(int argc, char*argv[]){
     //  Catch Ctrl+C so we can shut down with a clean message instead of the OS killing the process mid-operation.
     std::signal(SIGINT, handleShutdownSignal);
 
-    //  The shared queue every tailer thread writes into, and every rule engine thread reads from.
     ThreadSafeQueue<LogEntry> sharedQueue;
 
-    //  One tailer thread per log file. Right now we're only watching a single file, so we spin up one thread for it.
     std:: thread tailerThread( watchLogFile, logFilePath, std::ref(sharedQueue));
     tailerThread.detach();
 
-    //  One rule engine instance per rule, each running on its own thread.
-    //  This rule fires alert if "ERROR" shows up 3+ times in 10 seconds.
+    //  fires alert if "ERROR" shows up 3+ times in 10 seconds.
     RuleEngine errorRule("ERROR",3,10);
     std:: thread ruleEngineThread(&RuleEngine::startWatching, &errorRule, std::ref(sharedQueue));
     ruleEngineThread.detach();
@@ -41,7 +38,7 @@ int main(int argc, char*argv[]){
     std:: cout<< "Log Monitor is now watching : " << logFilePath <<std::endl;
     std::cout << "Press Ctrl+C to stop." << std::endl;
 
-    //  Sleep here instead of busy-checking, so we're not wasting CPU while waiting for a shutdown request.
+    //  Sleep here instead of busy-checking
     while (!shutdownRequested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }

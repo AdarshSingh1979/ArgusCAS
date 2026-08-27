@@ -4,8 +4,8 @@
 #include <mutex>
 #include <condition_variable>
 
-/*  A queue built on the Michael-Scott lock-free design. Push and pop operate through compare-and-swap instead of a mutex,
-    so threads never block each other, they just retry if another thread got there first.  */
+/*  Michael-Scott lock-free queue. push/pop manipulate the actual list through CAS, no mutex. Not fully lock-free end to end though -
+    popItem blocks on a condvar when the queue is empty instead of spinning, see waitMutex below.   */
 
 template <typename ItemType>
 class LockFreeQueue {
@@ -21,16 +21,13 @@ private:
     std::atomic<Node*> headPointer;
     std::atomic<Node*> tailPointer;
 
-    /* These exist purely to let popItem sleep when the queue is empty instead of spinning. 
-       They never guard the queue's actual data, push and pop stay fully lock-free through compare-and-swap.    */
+    // only for the empty-queue sleep in popItem, never touches the actual list
     std::mutex waitMutex;
     std::condition_variable dataAvailableSignal;
 
 public:
     LockFreeQueue() {
-        /* The queue always starts with one empty dummy node,
-           so head and tail are never null and pop/push don't need a separate "queue is empty" case.   */
-
+        // dummy node so head/tail are never null
         Node* dummyNode = new Node();
         headPointer.store(dummyNode);
         tailPointer.store(dummyNode);
@@ -43,28 +40,21 @@ public:
             Node* lastNode = tailPointer.load();
             Node* nextNode = lastNode->next.load();
 
-            // Make sure tail hasn't moved since we read it a moment ago.
             if (lastNode == tailPointer.load()) {
                 if (nextNode == nullptr) {
-                    // Tail is genuinely the last node, try to attach here.
 
                     if (lastNode->next.compare_exchange_weak(nextNode, newNode)) {
-                        /*  Attached successfully, now try to advance tail to match.
-                         If this fails, another thread will finish the job for us.  */
-
+                        // attached, swing tail forward too - if this CAS fails another thread finishes it for us
                         tailPointer.compare_exchange_weak(lastNode, newNode);
                         break;
                     }
                 } else {
-                    /* Tail is lagging behind an already-attached node,
-                     help move it forward before retrying our own attempt.  */
-
+                    // tail is one behind, help it catch up before retrying
                     tailPointer.compare_exchange_weak(lastNode, nextNode);
                 }
             }
         }
 
-        // Wake up one sleeping consumer thread, if any, now that there's a new item available.
         std::lock_guard<std::mutex> notifyLock(waitMutex);
         dataAvailableSignal.notify_one();
     }
@@ -80,7 +70,6 @@ public:
                 if (firstNode == lastNode) {
                     if (nextNode == nullptr) {
 
-                        // Queue is empty, sleep here instead of spinning, and wake back up once pushItem signals us.
                         std::unique_lock<std::mutex> waitLock(waitMutex);
                         dataAvailableSignal.wait(waitLock, [this]() {
                             return headPointer.load()->next.load() != nullptr;
@@ -88,18 +77,15 @@ public:
                         continue;
                     }
 
-                    // Tail is lagging behind, help move it forward and retry.
+                    // tail is behind, help move it and retry
                     tailPointer.compare_exchange_weak(lastNode, nextNode);
                 } else {
-
-                    // There is a real item waiting, grab its value first.
                     ItemType value = nextNode->data;
                     if (headPointer.compare_exchange_weak(firstNode, nextNode)) {
 
-                        /* Intentionally not deleting firstNode here. A fully safe reclamation strategy needs hazard pointers or epoch-based
-                           reclamation so other threads can tell when a node is truly unreferenced. Without that, deleting immediately
-                           causes a use-after-free race under contention, confirmed by ThreadSanitizer. Leaking the node trades memory growth
-                           for correctness, which is the safe choice at this scope. */
+                        /* not deleting firstNode - TSan caught a use-after-free here under contention.
+                           proper fix is hazard pointers / epoch reclamation, out of scope for now,
+                           so this leaks the node instead: no race, memory grows unbounded. */
                         return value;
                     }
                 }

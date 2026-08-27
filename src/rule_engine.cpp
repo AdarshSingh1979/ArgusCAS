@@ -6,10 +6,9 @@ RuleEngine::RuleEngine(std::string wordToMatch, int maxAllowedInWindow, int wind
       windowDurationSeconds(windowDurationSeconds)  {}
 
     bool RuleEngine:: shouldFireAlert(std:: chrono :: system_clock:: time_point newMatchTime){
-        //  Record this new match before checking the window.
         recentMatchTimestamps.push_back(newMatchTime);
         
-        //  Drop every timestamp that has fallen outside the window, starting from the oldest entry at the front.
+        // drop timestamps that fell outside the window, oldest first
 
         while(!recentMatchTimestamps.empty()){
             auto oldestMatchTime = recentMatchTimestamps.front();

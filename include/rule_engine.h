@@ -7,9 +7,8 @@
 #include <deque>
 #include <chrono>
 
-/*  Watches fora burst of matching log lines within a short time window,
-    and fires an alert if too many show up too quickly.
-    one instance of this class tracks one rule ( e.g. too many ERRORS )    */
+/*  Fires an alert if a target word shows up too many times within a sliding time window.
+    One instance tracks one rule (e.g. too many ERRORs).   */
 
     class RuleEngine {
         public:
@@ -19,8 +18,7 @@
             
             RuleEngine(std::string wordToMatch, int maxAllowedInWindow, int windowDurationSeconds);
 
-        /*  Keeps pulling log lines from shared queue forever, and checks each one against this rule.   
-            Meant to run on its own thread */
+        // pulls from sharedQueue forever, checking each line against this rule. runs on its own thread
 
             void startWatching( ThreadSafeQueue<LogEntry>& sharedQueue );
 
@@ -28,14 +26,9 @@
             std:: string wordToMatch;
             int maxAllowedInWindow;
             int windowDurationSeconds;
-
-            // Timestamps of recent matching lines, oldest first.
-            // This is our sliding window
+            // sliding window: timestamps of recent matches, oldest first
 
             std:: deque<std:: chrono:: system_clock:: time_point> recentMatchTimestamps;
-
-            // Adds a new match, drops timestamps older than the window,
-            // and returns true if count now exceeds our limit.
 
             bool shouldFireAlert( std:: chrono:: system_clock:: time_point newMatchTime);
     };
