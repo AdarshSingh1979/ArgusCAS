@@ -1,0 +1,11 @@
+services:
+  log-monitor:
+    build: .
+    container_name: arguscas
+    volumes:
+      # Host ./logs maps to the container's watched directory, so you
+      # can append lines to ./logs/app.log from outside the container
+      # and watch ArgusCAS pick them up and fire alerts.
+      - ./logs:/var/log/watched
+    stdin_open: true
+    tty: true
